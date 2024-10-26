@@ -1,0 +1,522 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_I2CDevice.h>
+#include <SPI.h>
+#include <TFT_eSPI.h>
+#include "MLX90640_API.h"
+#include "MLX90640_I2C_Driver.h"
+#include "constants.h"
+
+
+// MLX90640 I2C pins
+#define SDA_PIN 10
+#define SCL_PIN 11
+
+// === Declarations of libraries, variables and constants  ========================================================
+
+TFT_eSPI tft = TFT_eSPI();
+TFT_eSprite img = TFT_eSprite(&tft);
+TFT_eSprite inf = TFT_eSprite(&tft);
+
+// Screen dimensions
+#define SCREEN_WIDTH 480
+#define SCREEN_HEIGHT 320
+#define IMAGE_WIDTH SCREEN_HEIGHT // 320
+#define IMAGE_HEIGHT (SCREEN_WIDTH / 2) // 240
+#define INFO_WIDTH SCREEN_HEIGHT // 320
+#define INFO_HEIGHT (SCREEN_WIDTH / 2) // 240
+
+// Addresses and parameters
+paramsMLX90640 mlx90640;
+#define I2C_ADDRESS 0x33
+#define I2C_FREQUENCY_KHZ 1000
+#define REFRESH_RATE 0x06 // 0x00: 0.5Hz, 0x01: 1Hz, 0x02: 2Hz, 0x03: 4Hz, 0x04: 8Hz, 0x05: 16Hz, 0x06: 32Hz, 0x07: 64Hz
+#define TA_SHIFT 8 // Ambient temperature (TA) shift
+#define EMMISIVITY 0.95
+
+// Sensor data
+#define FILTER true
+#define INTERPOLATE true
+#define MATRIX_X 32 // INPUT_COLS
+#define MATRIX_Y 24 // INPUT_ROWS
+#define MATRIX_SIZE (MATRIX_X * MATRIX_Y)
+#define MLX_MIRROR 1 // Set 1 when the camera is facing the screen
+#define SCALE_X (IMAGE_WIDTH / MATRIX_X) // 10
+#define SCALE_Y (IMAGE_HEIGHT / MATRIX_Y) // 10
+
+// Mix/Max initial temperatures
+#define MIN_TEMP 25
+#define MAX_TEMP 37
+
+// Buffers for source and interpolated data & variables for other sensor data
+float frame[MATRIX_SIZE];
+float *frameFiltered = NULL;
+uint16_t *frameInterpolated = NULL;
+float ambientTemperature = MIN_TEMP; // Ambient temparature calculated by sensor
+float vddVoltade = 0; // Sensor's VDD (Voltage Drain Drain, plus)
+
+// Loop control and UI variables
+float minTemp = MIN_TEMP;
+float maxTemp = MAX_TEMP;
+int lastFrameReadStatus = 0;
+ulong errorsCount = 0;
+ulong loopNumber = 0; // ms
+long loopDuration = 0; // ms
+float fps = 0;
+
+
+// === Declarations of functions =====================================================================
+
+void textOut(String text, int32_t x = 5, int32_t y = (IMAGE_HEIGHT / 2 - 10), uint8_t font = 2, uint16_t fgcolor = TFT_WHITE, uint16_t bgcolor = TFT_BLACK);
+void initializeScreen();
+void screenTest(TFT_eSprite spr, int32_t x, int32_t y);
+boolean isThermalSensorConnected();
+void initializeThermalSensor();
+void resetThermalSensor();
+void prepareInterpolation();
+inline void filter(float *in, float *out);
+inline void qusort(float s[], int start, int end);
+inline int mapf(float in, float a, float b);
+inline void interpolate(float *data, uint16_t *out);
+void readTempValues();
+void processTempValues();
+void drawThermalImage();
+void drawLegend();
+void drawInfo();
+
+
+// === Functions =====================================================================================
+
+// Standard Arduino framework's setup function
+void setup()
+{
+  // Initialize the screen
+  initializeScreen();
+  
+  // Initialize arrays and data we use for interpolation
+  prepareInterpolation();
+
+  // Test the screens
+  screenTest(img, 0, 0);
+  screenTest(inf, 0, IMAGE_HEIGHT);
+
+  // Initialize serial communication
+  Serial.begin(115200);
+  // Make sure that we use maximup possible CPU speed
+  setCpuFrequencyMhz(240);
+
+  // Initialize I2C and increase the clock speed
+  Wire.begin(SDA_PIN, SCL_PIN);
+  Wire.setClock(400000); // Increase I2C clock to 400 kHz for now
+  MLX90640_I2CFreqSet(400);
+
+  // Initialize MLX90640 thermal sensor
+  initializeThermalSensor();
+
+  // Draw min/max scale and legend
+  drawLegend();
+  delay(750);
+}
+
+// Standard Arduino framework's loop function
+void loop()
+{
+  long startTime = millis();
+
+  readTempValues();
+  processTempValues();
+  drawThermalImage();
+  if ((loopNumber % 6) == 0) drawInfo();
+  
+  loopDuration = millis() - startTime;
+  fps = (float)(1000.0 / loopDuration);
+}
+
+// Print text out
+void textOut(String text, int32_t x, int32_t y, uint8_t font, uint16_t fgcolor, uint16_t bgcolor)
+{
+  img.fillSprite(TFT_BLACK);
+  img.setTextColor(fgcolor, bgcolor);
+  img.drawString(text, x, y, font);
+  img.pushSprite(0, 0);
+}
+
+// Initialize screen
+void initializeScreen()
+{
+  // Initiate the LCD backlight LED
+  pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, HIGH);
+
+  // Initialize ILI9488 display
+  tft.init();
+  tft.setRotation(2);
+
+  // Create info sprite
+  inf.createSprite(INFO_WIDTH, INFO_HEIGHT);
+  inf.setSwapBytes(1);
+  inf.fillSprite(TFT_BLACK);
+  inf.pushSprite(0, IMAGE_HEIGHT);
+
+  // Create image sprite
+  img.createSprite(IMAGE_WIDTH, IMAGE_HEIGHT);
+  img.setSwapBytes(1);
+  img.fillSprite(TFT_BLACK);
+  img.pushSprite(0, 0);
+}
+
+// Screen color test
+void screenTest(TFT_eSprite spr, int32_t x, int32_t y)
+{
+  spr.fillSprite(TFT_BLACK);
+  int w = spr.width() / 8;
+  int h = spr.height() / 2;
+
+  spr.fillRect(0, 0, w, h, TFT_RED);
+  spr.fillRect(w * 1,  0, w, h, TFT_GREEN);
+  spr.fillRect(w * 2,  0, w, h, TFT_BLUE);
+  spr.fillRect(w * 3,  0, w, h, TFT_RED);
+  spr.fillRect(w * 4,  0, w, h, TFT_GREEN);
+  spr.fillRect(w * 5,  0, w, h, TFT_BLUE);
+  spr.fillRect(w * 6,  0, w, h, TFT_RED);
+  spr.fillRect(w * 7,  0, w, h, TFT_GREEN);
+
+  spr.fillRect(0, h, 67, h, TFT_BLUE);
+  spr.fillRect(w * 1,  h, 67, h, TFT_RED);
+  spr.fillRect(w * 2,  h, 67, h, TFT_GREEN);
+  spr.fillRect(w * 3,  h, 67, h, TFT_BLUE);
+  spr.fillRect(w * 4,  h, 67, h, TFT_RED);
+  spr.fillRect(w * 5,  h, 67, h, TFT_GREEN);
+  spr.fillRect(w * 6,  h, 67, h, TFT_BLUE);
+  spr.fillRect(w * 7,  h, 67, h, TFT_RED);
+
+  spr.pushSprite(x, y);
+  delay(500);
+  spr.fillSprite(TFT_BLACK);
+  spr.pushSprite(x, y);
+}
+
+// Check if the MLX90640 is connected
+boolean isThermalSensorConnected()
+{
+  Wire.beginTransmission((uint8_t)I2C_ADDRESS);
+  if (Wire.endTransmission() != 0)
+    return (false); // Sensor did not ACK
+  return (true);
+}
+
+// Initialize MLX90640 thermal sensor making that it is properly reset and initialized
+void initializeThermalSensor()
+{
+  // Initialize MLX90640 
+  if (!isThermalSensorConnected())
+  {
+    textOut("MLX90640 is not detected at default I2C address, freezing");
+    while (1);
+  }
+  textOut("MLX90640 online");
+  delay(500);
+
+  // Get device parameters - We only have to do this once
+  int status;
+  uint16_t eeMLX90640[MATRIX_SIZE + 64]; // 832
+    
+  for (int i = 0; i < 15; i++)
+  {
+    status = MLX90640_DumpEE(I2C_ADDRESS, eeMLX90640);
+    if (status == 0) break;
+    delay(10);
+  }
+  if (status == 0) textOut("MLX90640 params loaded");
+  else textOut("Failed to load MLX90640 params: " + String(status));
+  delay(500);
+
+  for (int i = 0; i < 15; i++)
+  {
+    status = MLX90640_ExtractParameters(eeMLX90640, &mlx90640);
+    if (status == 0) break;
+    delay(10);
+  }
+  if (status == 0) textOut("MLX90640 params extracted");
+  else textOut("MLX90640 params extraction failed, status=" + String(status));
+  delay(500);
+
+  MLX90640_I2CWrite(I2C_ADDRESS, 0x800D, 6401); // Writes the value 1901 (HEX) = 6401 (DEC) in the register at position 0x800D to enable reading out the temperatures
+  
+  // Set MLX90640 device at slave i2cAddress address 0x33, refresh rate and resolution
+  MLX90640_SetRefreshRate(I2C_ADDRESS, REFRESH_RATE);
+  MLX90640_SetResolution(I2C_ADDRESS, 0x03); // 0x03: 19-bit (maximum) resolution
+
+  // Once EEPROM has been read at 400kHz, we can increase to 1000kHz
+  Wire.setClock(I2C_FREQUENCY_KHZ * 1000);
+
+  textOut("Waiting for camera output...", 5, (IMAGE_HEIGHT / 2 - 10), 4);
+  delay(500);
+}
+
+// General reset to I2C bus and variables
+void resetThermalSensor()
+{
+  MLX90640_I2CGeneralReset(I2C_ADDRESS);
+  minTemp = MIN_TEMP;
+  maxTemp = MAX_TEMP;
+  ambientTemperature = MIN_TEMP;
+  vddVoltade = 0;
+  lastFrameReadStatus = 0;
+  errorsCount = 0;
+  loopNumber = 0;
+  loopDuration = 0;
+  fps = 0;
+}
+
+// Prepare interpolation arrays and data
+void prepareInterpolation()
+{
+  // Interpolation array init
+  if (INTERPOLATE)
+  {
+    frameInterpolated = (uint16_t *)malloc(IMAGE_WIDTH * IMAGE_HEIGHT * sizeof(uint16_t));
+    if (frameInterpolated == NULL)
+    {
+      textOut("frameInterpolated malloc error");
+      delay(300);
+      textOut("free/need=" + String(ESP.getFreeHeap()) + "/" + String(IMAGE_WIDTH * IMAGE_HEIGHT * sizeof(uint16_t)));
+      delay(300);
+    }
+    for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT; i++)
+      *(frameInterpolated + i) = colorMap[0];
+  }
+  // Filtered frame array init
+  frameFiltered = (float *)malloc(MATRIX_X * MATRIX_Y * sizeof(float));
+  if (frameFiltered == NULL)
+  {
+    textOut("frameFiltered malloc error");
+    delay(300);
+    textOut("free/need=" + String(ESP.getFreeHeap()) + "/" + String(MATRIX_X * MATRIX_Y * sizeof(float)));
+    delay(300);
+  }
+  for (int i = 0; i < MATRIX_X * MATRIX_Y; i++)
+    frameFiltered[i] = MIN_TEMP;
+
+  textOut("Interpolation initiated");
+  delay(500);
+}
+
+// Read temperature data from MLX90640
+void readTempValues()
+{
+  lastFrameReadStatus = 1;
+  uint16_t mlx90640Frame[MATRIX_SIZE + 64 + 2]; // 834
+
+  for (byte x = 0; x < 2; x++)
+  {
+    int status = MLX90640_GetFrameData(I2C_ADDRESS, mlx90640Frame);
+    lastFrameReadStatus = lastFrameReadStatus * status;
+   
+    vddVoltade = MLX90640_GetVdd(mlx90640Frame, &mlx90640);
+    ambientTemperature = MLX90640_GetTa(mlx90640Frame, &mlx90640);
+
+    float tr = ambientTemperature - TA_SHIFT; // Reflected temperature based on the sensor ambient temperature
+
+    MLX90640_CalculateTo(mlx90640Frame, &mlx90640, EMMISIVITY, tr, frame);
+    MLX90640_BadPixelsCorrection((&mlx90640)->brokenPixels, frame, MLX90640_GetCurMode(I2C_ADDRESS), &mlx90640);
+  }
+  
+  if (lastFrameReadStatus != 0) errorsCount++;
+}
+
+// Filter and sort temperature data from MLX90640
+void processTempValues()
+{
+  // Filter temperature data
+  filter(frame, frameFiltered);
+
+  // Sort temperature data
+  qusort(frame, 0, MATRIX_X * MATRIX_Y - 1);
+  minTemp = frame[0];
+  maxTemp = frame[MATRIX_SIZE - 1];
+}
+
+// Filter temperature data and change camera direction
+inline void filter(float *in, float *out)
+{
+  if (MLX_MIRROR == 1)
+  {
+    for (int i = 0; i < MATRIX_SIZE; i++)
+    {
+      if (FILTER == 1)
+        out[i] = (out[i] + in[i]) / 2;
+      else
+        out[i] = in[i];
+    }
+  }
+  else
+  {
+    for (int i = 0; i < MATRIX_Y; i++)
+      for (int j = 0; j < MATRIX_X; j++)
+      {
+        if (FILTER == 1)
+          out[MATRIX_X * i + (MATRIX_X - 1) - j] = (out[MATRIX_X * i + (MATRIX_X - 1) - j] + in[MATRIX_X * i + j]) / 2;
+        else
+          out[MATRIX_X * i + (MATRIX_X - 1) - j] = in[MATRIX_X * i + j];
+      }
+  }
+}
+
+// Quick sort
+inline void qusort(float s[], int start, int end) // custom function qusort()
+{
+  int i, j; // Define the variables as basic integers
+  i = start; // Assign the first element of each group to i
+  j = end; // Assign the last element of each group to j
+  s[0] = s[start]; // Set the base value
+  while (i < j)
+  {
+    while (i < j && s[0] < s[j])
+      j--; // shift position left
+    if (i < j)
+    {
+      s[i] = s[j]; // Put s[j] to the position of s[i]
+      i++;         // Shift position right
+    }
+    while (i < j && s[i] <= s[0])
+      i++; // Shift position left
+    if (i < j)
+    {
+      s[j] = s[i]; // Put s[j] greater than the base value into s[i] position
+      j--; // Shift position left
+    }
+  }
+  s[i] = s[0]; // Put value into the specified position
+  if (start < i)
+    qusort(s, start, j - 1); // Call qusort() function recursively on the segmented section
+  if (i < end)
+    qusort(s, j + 1, end);
+}
+
+// Float to 0,255
+inline int mapf(float in, float a, float b)
+{
+  if (in < a) return 0;
+  if (in > b) return 255;
+  return (int)(in - a) * 255 / (b - a);
+}
+
+// Interpolation function
+inline void interpolate(float *data, uint16_t *out)
+{
+  for (uint8_t h = 0; h < MATRIX_Y; h++)
+  {
+    for (uint8_t w = 0; w < MATRIX_X; w++)
+    {
+      out[h * SCALE_Y * IMAGE_WIDTH + w * SCALE_X] = mapf(data[h * MATRIX_X + w], MIN_TEMP, MAX_TEMP);
+    }
+  }
+  for (int h = 0; h < IMAGE_HEIGHT; h += SCALE_Y)
+  {
+    for (int w = 1; w < (IMAGE_WIDTH - SCALE_X); w += SCALE_X)
+    {
+      for (int i = 0; i < (SCALE_X - 1); i++)
+      {
+        out[h * IMAGE_WIDTH + w + i] = (out[h * IMAGE_WIDTH + w - 1] * ((SCALE_X - 1) - i) + out[h * IMAGE_WIDTH + w + (SCALE_X - 1)] * (i + 1)) / SCALE_X;
+      }
+    }
+    for (int i = 0; i < (SCALE_X - 1); i++)
+    {
+      out[h * IMAGE_WIDTH + ((IMAGE_WIDTH - SCALE_X) + 1) + i] = out[h * IMAGE_WIDTH + (IMAGE_WIDTH - SCALE_X)];
+    }
+  }
+  for (int w = 0; w < IMAGE_WIDTH; w++)
+  {
+    for (int h = 1; h < (IMAGE_HEIGHT - SCALE_Y); h += SCALE_Y)
+    {
+      for (int i = 0; i < (SCALE_X - 1); i++)
+      {
+        out[(h + i) * IMAGE_WIDTH + w] = (out[(h - 1) * IMAGE_WIDTH + w] * ((SCALE_X - 1) - i) + out[(h + (SCALE_Y - 1)) * IMAGE_WIDTH + w] * (i + 1)) / SCALE_X;
+      }
+    }
+    for (int i = 0; i < (SCALE_X - 1); i++)
+    {
+      out[((IMAGE_HEIGHT - SCALE_Y + 1) + i) * IMAGE_WIDTH + w] = out[(IMAGE_HEIGHT - SCALE_Y) * IMAGE_WIDTH + w];
+    }
+  }
+  for (int h = 0; h < IMAGE_HEIGHT; h++)
+  {
+    for (int w = 0; w < IMAGE_WIDTH; w++)
+    {
+      out[h * IMAGE_WIDTH + w] = colorMap[out[h * IMAGE_WIDTH + w]];
+    }
+  }
+}
+
+// Draw interpolated infrared image
+void drawThermalImage()
+{
+  if (INTERPOLATE)
+  {
+    interpolate(frameFiltered, frameInterpolated);
+    img.pushImage(0, 0, IMAGE_WIDTH, IMAGE_HEIGHT, frameInterpolated);
+  }
+  else
+  {
+    for (uint8_t h = 0; h < MATRIX_Y; h++)
+    {
+      for (uint8_t w = 0; w < MATRIX_X; w++)
+      {
+        uint8_t colorIndex = mapf(frameFiltered[h * MATRIX_X + w], MIN_TEMP, MAX_TEMP);
+        img.fillRect(SCALE_X * w, SCALE_Y * h, SCALE_X, SCALE_Y, colorMap[colorIndex]);
+      }
+    }
+  }
+  img.pushSprite(0, 0);
+}
+
+// Draw a legend
+void drawLegend()
+{
+  inf.fillSprite(TFT_BLACK);
+  inf.setTextColor(TFT_WHITE, TFT_BLACK);
+  inf.setTextSize(2);
+
+  for (int i = 0; i < 256; i++)
+    inf.drawFastVLine(32 + i, 15, 20, colorMap[i]);
+
+  inf.setCursor(5, 15);
+  inf.println((String) "" + MIN_TEMP);
+
+  inf.setCursor(290, 15);
+  inf.println((String) "" + MAX_TEMP);
+
+  inf.pushSprite(0, IMAGE_HEIGHT);
+}
+
+// Draw info
+void drawInfo()
+{
+  // Initial coords
+  int startX = 10;
+  int startY = 55;
+  
+  // Cleaning plot area
+  inf.fillRect(0, startY, INFO_WIDTH - 1, INFO_HEIGHT - startY - 1, TFT_BLACK);
+  
+  // Center temperature
+  inf.setTextColor(colorMap[mapf(maxTemp, MIN_TEMP, MAX_TEMP)]);
+  inf.drawString("Center: " + String(maxTemp, 2), startX + 55, startY, 2);
+  startY += 55;
+  
+  // Statistics
+  inf.setTextColor(TFT_WHITE, TFT_BLACK);
+  inf.drawString(" FPS, frames/sec: " + String(fps, 2), startX, startY, 1); // fps
+  startY += 23;
+  inf.drawString(" Loop length, ms: " + String(loopDuration), startX, startY, 1); // Loop, ms
+  startY += 23;
+  inf.drawString("Last status code: " + String(lastFrameReadStatus), startX, startY, 1); // Last data read status
+  startY += 23;
+  inf.drawString("  Errors counter: " + String(errorsCount), startX, startY, 1); // Errors counter
+  startY += 23;
+  inf.drawString(" Ambient temp, C: " + String(ambientTemperature, 2), startX, startY, 1); // Ambient temperature
+  startY += 23;
+
+  inf.pushSprite(0, IMAGE_HEIGHT);
+}
