@@ -346,7 +346,7 @@ void initializeWebServer(){
   webServerEnabled = webServerEnabled && WiFi.softAPConfig(local_IP, gateway, subnet);
   if (!webServerEnabled) return;
 
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
     int page = 0;
     if (request->hasParam("page")) {
       page = request->getParam("page")->value().toInt();
@@ -360,7 +360,7 @@ void initializeWebServer(){
     request->send(200, "text/html", html);
   });
 
-  server.on("/image", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/image", HTTP_GET, [](AsyncWebServerRequest *request) {
     if (request->hasParam("file")) {
       String fileName = request->getParam("file")->value();
       String html = imagePageHtml;
@@ -371,7 +371,7 @@ void initializeWebServer(){
     }
   });
 
-  server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request) {
     if (request->hasParam("file")) {
       String fileName = "/" + request->getParam("file")->value();
       if (SD.exists(fileName)) {
@@ -384,7 +384,7 @@ void initializeWebServer(){
     }
   });
 
-  server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/download", HTTP_GET, [](AsyncWebServerRequest *request) {
     if (request->hasParam("file")) {
       String fileName = "/" + request->getParam("file")->value();
       if (SD.exists(fileName)) {
@@ -396,7 +396,7 @@ void initializeWebServer(){
     }
   });
 
-  server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request) {
     String fileName = "/favicon.png";
     if (SD.exists(fileName)) {
       AsyncWebServerResponse *response = request->beginResponse(SD, fileName, "image/png");
@@ -409,7 +409,8 @@ void initializeWebServer(){
 }
 
 // List files on SD card
-String listFiles(int page) {
+String listFiles(int page)
+{
   String html = "";
   std::vector<String> fileNames;
   int startIndex = page * IMAGES_PER_PAGE;
@@ -420,8 +421,10 @@ String listFiles(int page) {
   File file = root.openNextFile();
 
   // Collect file names
-  while (file) {
-    if (!file.isDirectory() && isImage(file.name())) {
+  while (file)
+  {
+    if (!file.isDirectory() && isImage(file.name()))
+    {
       fileNames.push_back(String(file.name()));
       count++;
     }
@@ -432,7 +435,8 @@ String listFiles(int page) {
   std::sort(fileNames.begin(), fileNames.end(), std::greater<String>());
 
   // Generate HTML from sorted file names
-  for (int i = startIndex; i < endIndex && i < count; i++) {
+  for (int i = startIndex; i < endIndex && i < count; i++)
+  {
     html += "<div class='file-container'>";
     html += "<p><a href=\"/image?file=" + fileNames[i] + "\">" + fileNames[i] + "</a></p>";
     html += "<div class='image-container'><img src='/" + fileNames[i] + "' alt='" + fileNames[i] + "' /></div>";
@@ -447,25 +451,28 @@ String listFiles(int page) {
 }
 
 // Pagination
-String pagination(int page){
+String pagination(int page)
+{
   String html = "<div class='pagination'>";
   int startPage = max(0, page - 2);  // Show up to 2 pages before current
   int endPage = min(lastPage, page + 2);  // Show up to 2 pages after current
 
-  if (page > 0) {
+  if (page > 0)
+  {
     html += "<a href='/?page=0'>&lt;&lt;</a> ";
     html += "<a href='/?page=" + String(page - 1) + "'>&lt;</a> ";
   }
 
-  for (int i = startPage; i <= endPage; i++) {
-    if (i == page) {
+  for (int i = startPage; i <= endPage; i++)
+  {
+    if (i == page)
       html += "<span>" + String(i + 1) + "</span> ";  // Current page
-    } else {
+    else
       html += "<a href='/?page=" + String(i) + "'>" + String(i + 1) + "</a> ";
-    }
   }
 
-  if (page < lastPage) {
+  if (page < lastPage)
+  {
     html += "<a href='/?page=" + String(page + 1) + "'>&gt;</a> ";
     html += "<a href='/?page=" + String(lastPage) + "'>&gt;&gt;</a>";
   }
@@ -475,7 +482,8 @@ String pagination(int page){
 }
 
 // Check if the file is a BMP image
-bool isImage(String fileName){
+bool isImage(String fileName)
+{
   return fileName.endsWith(".bmp");
 }
 
@@ -524,7 +532,7 @@ void initializeButtons()
   filteringBtn.drawButton(false, (filtering ? "*" : ""));
   inf.setTextColor(TFT_SILVER, TFT_DARK_DARK_GREY);
   inf.setTextSize(1);
-  inf.drawString("Anti-aliasing", x + CHECKBOX_WIDTH + 6, CHECKBOX_Y + 12, 1);
+  inf.drawString("Softening", x + CHECKBOX_WIDTH + 6, CHECKBOX_Y + 12, 1);
 
   inf.setTextSize(textSize);
   inf.setTextFont(textFont);
@@ -708,7 +716,7 @@ bool saveScreenshot(bool thermalImageOnly)
     for (int w = 0; w < width; w++)
     {
       uint16_t rgb;
-      if (thermalImageOnly)  // getting color in rgb565 format
+      if (thermalImageOnly) // getting color in rgb565 format
       {
         rgb = frameInterpolated[((h - 1) * width) + w];
       }
@@ -723,8 +731,7 @@ bool saveScreenshot(bool thermalImageOnly)
       vh = (rgb & 0xFF00) >> 8; // High Byte
       vl = rgb & 0x00FF; // Low Byte
 
-      // RGB565 to RGB555 conversion... 555 is default for uncompressed BMP
-      // this conversion is from ...topic=177361.0 and has not been verified
+      // RGB565 to RGB555 conversion, 555 is default for uncompressed BMP
       vl = (vh << 7) | ((vl & 0xC0) >> 1) | (vl & 0x1f);
       vh = vh >> 1;
 
