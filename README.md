@@ -57,5 +57,28 @@ A portable, battery-powered, low-cost thermal imaging camera with a touch screen
 
 - Compile the project and upload it to the board
 
+## Wiring
+
+![Wiring](https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/wiring.jpg)
+
+## Modelling
+
+![Modelling](https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/modelling.jpg)
+
+## Unit body and layout
+
+The unit is housed in a transparent two-layer case with a power switch and USB-C interface for charging the battery. The sensor and battery are located on the top layer to minimize the effect of the ESP32-32's heating on sensor readings and battery performance.
+
+<img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/unit_back.jpg" width="400" height="250"/><img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/unit_front.jpg" height="250"/>
+
+## UI/UX
+
+The thermal image is displayed in the top half of the screen, while the temperature range, controls, and parameters are displayed in the bottom half of the screen.
+
+<img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/unit_back.jpg" width="300"/><img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/unit_front.jpg" width="300"/>
 
 
+## Web Server
+Provides user access to screenshots stored on the onboard SD card. To download and manage screenshots, the user should connect to the board's Wi-Fi access point and follow this url: **http://192.168.4.1/**.
+
+![Web Server](https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/webpage.jpg)
