@@ -63,19 +63,19 @@ A portable, battery-powered, low-cost thermal imaging camera with a touch screen
 
 ## Modelling
 
-<img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/webpage.jpg" height="450"/>
+<img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/modelling.jpg" height="450"/>
 
 ## Unit body and layout
 
 The unit is housed in a transparent two-layer case with a power switch and USB-C interface for charging the battery. The sensor and battery are located on the top layer to minimize the effect of the ESP32-32's heating on sensor readings and battery performance.
 
-<img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/unit_back.jpg" width="364" height="361"/><span style="display:inline-block; width: 30;"></span><img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/unit_front.jpg" height="361"/>
+<img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/unit_back.jpg" width="436" height="361" hspace="30"/><img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/unit_front.jpg" height="361"/>
 
 ## UI/UX
 
 The screenshots below show examples of the interface with interpolation and softening on and off respectively. The thermal image is displayed in the top half of the screen, while the temperature range, controls, and parameters are displayed in the bottom half of the screen.
 
-<img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/screenshot_interpolated.jpg" width="436"/><span style="display:inline-block; width: 30;"></span><img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/screenshot_not_interpolated.jpg" width="300"/>
+<img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/screenshot_interpolated.jpg" width="300" hspace="30"/><img src="https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/assets/screenshot_not_interpolated.jpg" width="300"/>
 
 
 ## Web Server
