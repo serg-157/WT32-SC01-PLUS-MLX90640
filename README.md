@@ -75,7 +75,7 @@ The device is housed in a transparent two-layer case with a power switch and a U
 
 The screenshots below show examples of the interface with interpolation and softening on and off respectively. The thermal image is displayed in the top half of the screen, while the temperature range, controls, and parameters are displayed in the bottom half of the screen.
 
-By touching the thermal image, the user can move the center temperature measurement point (printed in yellow). The temperature measurement range can also be changed by touching different zones of the color legend (rainbow ruler).
+By touching the thermal image, the user can move the temperature measurement point (white circle) for the temperature, displayed in the center in yellow color. The temperature measurement range can also be changed by touching different zones of the color legend (rainbow ruler).
 
 The current temperature range is displayed on the first line of the status bar at the bottom of the screen, along with the current fps value and center point coordinates. The second line displays access point connection information.
 
