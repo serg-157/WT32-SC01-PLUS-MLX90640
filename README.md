@@ -1,8 +1,8 @@
-# Portable thermal imaging camera based on MLX90640 sensor and WT32-SC01-PLUS multi-touch LCD screen with ESP32-S3 controller
+# Portable thermal imaging camera based on MLX90640 sensor and WT32-SC01-PLUS touch screen with ESP32-S3 onboard controller
 
 ## Concept
 
-A portable, battery-powered, low-cost thermal imaging camera with a touch screen that can take screenshots and has a built-in web server to manage them.
+A portable, battery-powered, low-cost thermal imaging camera with a touch screen that can take screenshots and has a built-in web server to download them.
 
 ## Hardware
 
@@ -28,7 +28,7 @@ A portable, battery-powered, low-cost thermal imaging camera with a touch screen
 
 - [Linear interpolation](https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/src/interpolation.h) is used to transform 32×24 thermal matrix data into a 320×240 screen image, as well as a frame-to-frame softening algorithm. Both can be disabled from the user interface.
 
-- [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer.git) is used to provide user access to screenshots (.bmp files) stored on the onboard SD card. To download and manage screenshots, the user should connect to the board's Wi-Fi access point and follow this url: **http://192.168.4.1/**.
+- [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer.git) is used to provide user access to screenshots (.bmp files) stored on the onboard SD card. To download and manage screenshots, the user needs to connect to the board's Wi-Fi hotspot and navigate to the local IP address in the browser.
 
 - EEPROM memory is used to store the boot counter and the measurable temperature range.
 
@@ -37,7 +37,7 @@ A portable, battery-powered, low-cost thermal imaging camera with a touch screen
 
 - Install VS Code and the [PlatformIO](https://platformio.org/) plugin.
 
-- Create new project and select **ttgo-lora32-v1** board.
+- Create new project and select **esp32-s3-devkitc-1** board.
 
 - Add dependencies:
   - [TFT_eSPI](https://github.com/dkalliv/TFT_eSPI)
@@ -45,15 +45,15 @@ A portable, battery-powered, low-cost thermal imaging camera with a touch screen
   - [Melexis MLX90640 API](https://github.com/melexis/mlx90640-library)
   - [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer.git)
 
-- Set the correct target board for TFT_eSPI library by editing the contents of [User_Setup_Select.h](https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/lib/User_Setup_Select.h) and [Setup214_WT32_SC01_Plus.h](https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/lib/Setup214_WT32_SC01_Plus.h) files.
+- Set the correct target board for **TFT_eSPI** library by editing the contents of [User_Setup_Select.h](https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/lib/User_Setup_Select.h) and [Setup214_WT32_SC01_Plus.h](https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/blob/main/lib/Setup214_WT32_SC01_Plus.h) files.
 
 - Replace **platformio.ini** file and the contents of your **src** directory with the contents of this repository's **src** [directory](https://github.com/serg-157/WT32-SC01-PLUS-MLX90640/tree/main/src).
 
-- Enable the console output if required `#define CONSOLE_OUTPUT true`.
+- Enable the console output if needed `#define CONSOLE_OUTPUT true`.
 
-- Connect MLX90640 thermal imaging sensor to [Extended I/O Interface](https://doc.riot-os.org/group__boards__esp32s3__wt32__sc01__plus.html) of your WT32-SC01 PLUS board.
+- Connect **MLX90640** thermal imaging sensor to [Extended I/O Interface](https://doc.riot-os.org/group__boards__esp32s3__wt32__sc01__plus.html) of your **WT32-SC01 PLUS** board.
 
-- Connect the WT32-SC01 PLUS board to your computer using the USB-C data cable. To put the board into upload mode, it is necessary to ground pin 6 (boot, GPIO0) of the debug interface and press the reset button.
+- Connect the **WT32-SC01 PLUS** board to your computer using the USB-C data cable. To put the board into upload mode, it is necessary to ground pin 6 (boot, GPIO0) of the debug interface and press the reset button.
 
 - Compile the project and upload it to the board
 
